@@ -820,8 +820,8 @@ while true; do
     *) break ;;
   esac
 done
-# REVERSE OPTION only for CPOY
-if [ $CPOY -eq 0 ];
+# REVERSE OPTION only for COPY
+if [ $COPY -eq 0 ];
 then
     REVERSE=0
 fi
