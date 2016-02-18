@@ -801,6 +801,7 @@ NOLOCAL=0             # --no-local option off by default
 NOCLEAN=0             # --no-clean off by default
 NOSHELL=0             # --no-shell option off by default
 COPY=0                # --copy option off by default
+REVERSE=0             # --reverse option off by default
 basedir=''
 while true; do
   case "$1" in
@@ -819,6 +820,11 @@ while true; do
     *) break ;;
   esac
 done
+# REVERSE OPTION only for CPOY
+if [ $CPOY -eq 0 ];
+then
+    REVERSE=0
+fi
 
 ###############################
 # Handle "list" command
