@@ -67,6 +67,7 @@ Module Commands:
   [--no-shell]       skip processing @shell lines
   [--basedir <path>] on checkout/clone, specifies a base for module deployment
   [--copy]           deploy by copying files instead of symlinks
+  [--reverse]        with copy option, it copy files from magento root to .modman (useful for debugging purpose)
   [<VCS options>]    specify additional parameters to VCS checkout/clone
 "
 tutorial="\
@@ -412,14 +413,14 @@ remove_module_copys ()
 {
   echo "Removing copys for module $module."
   local module="$mm/$module/modman"
-  local basedir=$(get_basedir "$module_dir")
+local basedir=$(get_basedir "$module_dir")
 
   # Use argument if module doesn't have a .basedir file
   if [ -z "$basedir" ]; then
     basedir=$2
   fi
 
-  # while loop should not read from stdin or else @shell scripts cannot get stdin
+# while loop should not read from stdin or else @shell scripts cannot get stdin
   IFS=$'\r\n'
   for line in $(grep -v -e '^#' -e '^\s*$' "$module"); do
     IFS=$' \t\n'
@@ -449,10 +450,9 @@ remove_module_copys ()
 	error "Cannot remove @import"
       return 1
     fi
-
-    local dest=$root/${basedir}${real%/}
+ local dest=$root/${basedir}${real%/}
 	echo "rm -Rf $dest"
-    rm -Rf $dest
+   rm -Rf $dest 
     
   done
   return 0
@@ -608,7 +608,7 @@ apply_path ()
   fi
 
   # Handle cases where files already exist at the destination or link does not match expected destination
-  if [ -e "$dest" ];
+  if [ -e "$dest" ] && [ $REVERSE -eq 0 ];
   then
     if ! [ -L "$dest" ] && [ $FORCE -eq 0 ]; then
       echo_b "CONFLICT: $($stat_type "$dest") already exists and is not a symlink:"
@@ -625,7 +625,7 @@ apply_path ()
   fi
 
   # Create links if they do not already exist
-  if ! [ -e "$dest" ];
+  if ! [ -e "$dest" ]  || [ $REVERSE -eq 1 ];
   then
     # Delete conflicting symlinks that are broken
     if [ -L "$dest" ]; then
@@ -640,7 +640,16 @@ apply_path ()
     success=0
     if [ $COPY -eq 1 ]; then
       verb='copy'
-      cp -R "$src" "$dest" && success=1
+      if [ $REVERSE -eq 1 ]; then
+          verb='reverse copy'
+          src_tmp=$src
+          src=$dest
+          dest=$src_tmp
+	      dest=${dest%/*}
+          cp -Rf "$src" "$dest" && success=1
+      else
+    	cp -R "$src" "$dest" && success=1
+      fi
     else
       verb='create symlink'
       ln -s "$src" "$dest" && success=1
@@ -800,6 +809,7 @@ while true; do
     --no-clean)    NOCLEAN=1; shift ;;
     --no-shell)    NOSHELL=1; shift ;;
     --copy)        COPY=1; shift ;;
+    --reverse)     REVERSE=1; shift ;;
     --basedir)
       shift; basedir="$1"; shift
       if ! [ -n "$basedir" -a -d "$root/$basedir" ]; then
@@ -1250,9 +1260,9 @@ case "$action" in
   undeploy)
     require_wc "$module" || exit 1
     if [ $COPY -eq 1 ]; then
-	    remove_module_copys "$module" || exit 1
+	remove_module_copys "$module" || exit 1
     else
-	    remove_module_links "$module" || exit 1
+	remove_module_links "$module" || exit 1
     fi
     ;;
 
