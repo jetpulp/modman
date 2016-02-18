@@ -408,6 +408,55 @@ remove_module_links ()
   return 0
 }
 
+remove_module_copys ()
+{
+  echo "Removing copys for module $module."
+  local module="$mm/$module/modman"
+  local basedir=$(get_basedir "$module_dir")
+
+  # Use argument if module doesn't have a .basedir file
+  if [ -z "$basedir" ]; then
+    basedir=$2
+  fi
+
+  # while loop should not read from stdin or else @shell scripts cannot get stdin
+  IFS=$'\r\n'
+  for line in $(grep -v -e '^#' -e '^\s*$' "$module"); do
+    IFS=$' \t\n'
+    # Split <target> <real>
+    read target real <<< $line
+
+    # Assume target == real if only one path is given
+    if [ -z "$real" ]; then
+        real="$target"
+    fi
+
+    # Sanity check for empty data
+    if [ -z "$target" -o -z "$real" ]; then
+      error "Invalid input in modman file ($relpath):\n $line"
+      return 1
+    fi
+
+    # Import other module definitions (e.g. git submodules, svn:externals, etc..)
+    if [ "$target" = "@import" ]; then
+	 error "Cannot remove @import"
+      return 1
+    fi
+
+    # Run commands on the shell!
+    # temporary file is workaround so that script can receive stdin
+    if [ "$target" = "@shell" ]; then
+	error "Cannot remove @import"
+      return 1
+    fi
+
+    local dest=$root/${basedir}${real%/}
+	echo "rm -Rf $dest"
+    rm -Rf $dest
+    
+  done
+  return 0
+}
 ################################################################################
 # Reads a modman file and does the following:
 #   Creates the symlinks as described
@@ -1200,7 +1249,11 @@ case "$action" in
 
   undeploy)
     require_wc "$module" || exit 1
-    remove_module_links "$module" || exit 1
+    if [ $COPY -eq 1 ]; then
+	    remove_module_copys "$module" || exit 1
+    else
+	    remove_module_links "$module" || exit 1
+    fi
     ;;
 
   skip)
