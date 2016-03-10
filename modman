@@ -412,15 +412,16 @@ remove_module_links ()
 remove_module_copys ()
 {
   echo "Removing copys for module $module."
+  local module_dir="$mm/$module"
   local module="$mm/$module/modman"
-local basedir=$(get_basedir "$module_dir")
+  local basedir=$(get_basedir "$module_dir")
 
   # Use argument if module doesn't have a .basedir file
   if [ -z "$basedir" ]; then
     basedir=$2
   fi
 
-# while loop should not read from stdin or else @shell scripts cannot get stdin
+  # while loop should not read from stdin or else @shell scripts cannot get stdin
   IFS=$'\r\n'
   for line in $(grep -v -e '^#' -e '^\s*$' "$module"); do
     IFS=$' \t\n'
@@ -440,20 +441,43 @@ local basedir=$(get_basedir "$module_dir")
 
     # Import other module definitions (e.g. git submodules, svn:externals, etc..)
     if [ "$target" = "@import" ]; then
-	 error "Cannot remove @import"
-      return 1
+	  warning "Cannot remove @import"
+      continue
     fi
 
     # Run commands on the shell!
     # temporary file is workaround so that script can receive stdin
     if [ "$target" = "@shell" ]; then
-	error "Cannot remove @import"
-      return 1
+	  warning "Cannot remove @shell"
+      continue
     fi
- local dest=$root/${basedir}${real%/}
-	echo "rm -Rf $dest"
-   rm -Rf $dest 
-    
+
+    local src=$module_dir/$target
+    local dest=$root/${basedir}${real%/}
+    dest=${dest/\/\//\/} # Replace // with /
+    dest=${dest%/} # Strip trailing /
+
+    # Handle globbing (extended globbing enabled)
+    shopt -s extglob
+    if ! [ -e "$src" ] && [ $(ls $src 2> /dev/null | wc -l) -gt 0 ]; then
+        for _src in $src; do
+            echo "rm -Rf $dest/${_src##*/}"
+            rm -Rf "$dest/${_src##*/}" || return 1
+        done
+        continue
+    fi # end Handle globbing
+
+    if [ -d "$src" ]; then
+        echo "rm -Rf $dest"
+        rm -Rf $dest || return 1
+        continue
+    fi
+
+    if [ -f "$src" ]; then
+        echo "rm -f $dest"
+        rm -f $dest || return 1
+    fi
+
   done
   return 0
 }
@@ -1257,7 +1281,11 @@ case "$action" in
 
   deploy)
     require_wc "$module" || exit 1
-    apply_modman_file "$wc_desc" && echo "$module has been deployed under $root"
+    message="$module has been deployed under $root"
+    if [ $COPY -eq 1 ] && [ $REVERSE -eq 1 ]; then
+        message="$module has been reverse deployed from $root"
+    fi
+    apply_modman_file "$wc_desc" && echo $message
     if [ $NOLOCAL -eq 0 -a -r "$wc_desc.local" ]; then
       apply_modman_file "$wc_desc.local" && echo "Applied local modman file for $module"
     fi
